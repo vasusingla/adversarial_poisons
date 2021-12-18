@@ -153,7 +153,8 @@ class _Forgemaster():
 
             target_losses = target_losses / (batch + 1)
             poison_acc = poison_correct / len(dataloader.dataset)
-            if step % (self.args.attackiter // 5) == 0 or step == (self.args.attackiter - 1):
+            if True:
+            # if step % (self.args.attackiter // 5) == 0 or step == (self.args.attackiter - 1):
                 print(f'Iteration {step}: Target loss is {target_losses:2.4f}, '
                       f'Poison clean acc is {poison_acc * 100:2.2f}%')
 
@@ -174,7 +175,13 @@ class _Forgemaster():
         """Take a step toward minmizing the current target loss."""
         inputs, labels, ids = example
         inputs = inputs.to(**self.setup)
-        labels = labels.to(dtype=torch.long, device=self.setup['device'], non_blocking=NON_BLOCKING)
+        if type(labels)==list:
+            labels = [label.to(dtype=torch.long, device=self.setup['device'], non_blocking=NON_BLOCKING)
+                      for label in labels]
+        elif isinstance(labels, torch.Tensor):
+            labels = labels.to(self.setup['device'])
+        else:
+            labels = labels.to(dtype=torch.long, device=self.setup['device'], non_blocking=NON_BLOCKING)
 
         # Add adversarial pattern
         poison_slices, batch_positions = [], []

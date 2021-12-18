@@ -14,9 +14,13 @@ def options():
     ###########################################################################
     # Central:
     parser.add_argument('--net', default='ResNet18', type=lambda s: [str(item) for item in s.split(',')])
-    parser.add_argument('--dataset', default='CIFAR10', type=str, choices=['CIFAR10', 'CIFAR100', 'ImageNet', 'ImageNet1k', 'MNIST', 'TinyImageNet', 'ImageNet_load'])
+    parser.add_argument('--dataset', default='CIFAR10', type=str, choices=['CIFAR10', 'CIFAR100', 'ImageNet',
+                                                                           'ImageNet1k', 'MNIST', 'TinyImageNet',
+                                                                           'ImageNet_load', 'CIFAR10_KMEANS',
+                                                                           'CIFAR10_multihead', 'CIFAR10_KNN'])
     parser.add_argument('--recipe', default='targeted', type=str, choices=['grad_explosion', 'tensorclog',
-                                                                                    'untargeted', 'targeted'])
+                                                                                    'untargeted', 'targeted', 'kmeans',
+                                                                                    'knn', 'knn_farthest'])
     parser.add_argument('--threatmodel', default='single-class', type=str, choices=['single-class', 'third-party', 'random-subset'])
 
     # Reproducibility management:
@@ -76,7 +80,9 @@ def options():
 
 
     # Optimization setup
-    parser.add_argument('--pretrained', action='store_true', help='Load pretrained models from torchvision, if possible [only valid for ImageNet].')
+    parser.add_argument('--pretrained', action='store_true', help='Load pretrained models from torchvision, if possible [only valid for ImageNet,'
+                                                                  'SimCLR, and multihead models].')
+    parser.add_argument('--load_ckpt', type=str, help='Specify the location of the checkpoint to load the model, need pretrained specified as well.')
     parser.add_argument('--optimization', default='conservative', type=str, help='Optimization Strategy')
 
     # Strategy overrides:
@@ -89,6 +95,21 @@ def options():
     # Optionally, datasets can be stored as LMDB or within RAM:
     parser.add_argument('--lmdb_path', default=None, type=str)
     parser.add_argument('--cache_dataset', action='store_true', help='Cache the entire thing :>')
+
+    # Dataset stuff
+    parser.add_argument('--not_normalize', action='store_true', help='If specified, dataset will not be normalized')
+    parser.add_argument('--centroids_path', type=str, help='Path to the centroids computed by SimCLR, only used with'
+                                                           'CIFAR10_KMEANS')
+    parser.add_argument('--simclr_features_path', type=str, help='Path to features computed by SimCLR, only used with'
+                                                                 'CIFAR10_KNN')
+    parser.add_argument('--target_knn_path', type=str, help='Path to the indexes used as targets for KNN attack, only used'
+                                                       'with CIFAR10_KNN')
+
+    # K-means attack stuff
+    parser.add_argument('--centroid_path', type=str, help='path to store k-means computed centroids')
+    parser.add_argument('--feature_mean_path', type=str, help='path to store mean values for features used in k-means')
+    parser.add_argument('--feature_std_path', type=str, help='path to store std values for features used in k-means')
+
 
 
     # Debugging:

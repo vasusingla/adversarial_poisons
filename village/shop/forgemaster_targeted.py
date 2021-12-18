@@ -17,14 +17,28 @@ class ForgemasterTargeted(_Forgemaster):
             """This function will be evaluated on all GPUs."""  # noqa: D401
             outputs = model(inputs)
             new_labels = self._label_map(outputs, labels)
-            loss = criterion(outputs, new_labels)
+            if type(outputs) == list:
+                losses = [criterion(output, new_label) for output, new_label
+                          in zip(outputs, new_labels)]
+                loss = sum(losses)
+            else:
+                loss = criterion(outputs, new_labels)
             loss.backward(retain_graph=self.retain)
-            prediction = (outputs.data.argmax(dim=1) == new_labels).sum()
+            if type(outputs) == list:
+                prediction = [(output.data.argmax(dim=1)==new_label).sum() for
+                              output, new_label in zip(outputs, new_labels)]
+                prediction = sum(prediction)/len(prediction)
+            else:
+                prediction = (outputs.data.argmax(dim=1) == new_labels).sum()
+            # prediction = (outputs.data.argmax(dim=1) == new_labels).sum()
             return loss.detach().cpu(), prediction.detach().cpu()
         return closure
 
     def _label_map(self, outputs, labels):
         # This is a naiive permutation on the label space. You can implement
         # any permutation you like here.
-        new_labels = (labels + 1) % outputs.shape[1]
+        if type(labels)==list:
+            new_labels = [(label+1)%output.shape[1] for label, output in zip(labels, outputs)]
+        else:
+            new_labels = (labels + 1) % outputs.shape[1]
         return new_labels

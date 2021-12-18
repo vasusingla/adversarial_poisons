@@ -1,19 +1,22 @@
 """Model definitions."""
+import os
 
 import torch
 import torchvision
 from torchvision.models.resnet import BasicBlock, Bottleneck
 
 from collections import OrderedDict
+from .simclr_resnet50 import EncodeProject
+from .multi_head import multihead_resnet18
 
 from .mobilenet import MobileNetV2
 from .vgg import VGG
 
 
-def get_model(model_name, dataset_name, pretrained=False):
+def get_model(model_name, dataset_name, pretrained=False, ckpt_path=''):
     """Retrieve an appropriate architecture."""
     if 'CIFAR' in dataset_name or 'MNIST' in dataset_name:
-        if pretrained:
+        if pretrained and model_name!='simclr-resnet50' and model_name!='multihead_resnet18':
             raise ValueError('Loading pretrained models is only supported for ImageNet.')
         in_channels = 1 if dataset_name == 'MNIST' else 3
         num_classes = 10 if dataset_name in ['CIFAR10', 'MNIST', 'CIFAR_resized', 'CIFAR_load'] else 100
@@ -40,6 +43,24 @@ def get_model(model_name, dataset_name, pretrained=False):
             model = VGG(model_name)
         elif model_name == 'MobileNetV2':
             model = MobileNetV2(num_classes=num_classes, train_dp=0, test_dp=0, droplayer=0, bdp=0)
+        elif model_name == 'multihead_resnet18':
+            # TODO - I know, need to fix this too
+            #        need to specify centroids for each
+            model = multihead_resnet18()
+            ckpt = torch.load('/vulcanscratch/vsingla/unlearnable_dataset/'
+                              'adversarial_poisons/train_multihead/'
+                              'simclr_new_6_8_10_12_14/model_final.pt')
+            new_state_dict = OrderedDict()
+            for k, v in ckpt.items():
+                name = k[7:]  # remove `module.`
+                new_state_dict[name] = v
+            model.load_state_dict(new_state_dict)
+        elif model_name == 'simclr-resnet50':
+            if not pretrained:
+                raise RuntimeError("SimCLR model was specified without specifying pretrained!")
+            model = EncodeProject()
+            ckpt = torch.load(ckpt_path)
+            model.load_state_dict(ckpt['state_dict'])
         else:
             raise ValueError(f'Architecture {model_name} not implemented for dataset {dataset_name}.')
 

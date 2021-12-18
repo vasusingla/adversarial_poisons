@@ -40,6 +40,9 @@ parser.add_argument('--epochs', type=int, default=200)
 parser.add_argument('--lr', default=0.1, type=float, help='learning rate')
 parser.add_argument('--resume', '-r', action='store_true',
                     help='resume from checkpoint')
+parser.add_argument('--save_dir', type=str)
+parser.add_argument('--clean_train', action='store_true')
+
 args = parser.parse_args()
 
 print(args)
@@ -65,12 +68,12 @@ baseset = torchvision.datasets.CIFAR10(
     root='~/data', train=True, download=False, transform=transform_train)
 trainset = CIFAR_load(root=args.load_path, baseset=baseset)
 trainloader = torch.utils.data.DataLoader(
-    trainset, batch_size=128, shuffle=True, num_workers=2)
+    trainset, batch_size=128, shuffle=True, num_workers=4)
 
 testset = torchvision.datasets.CIFAR10(
     root='~/data', train=False, download=False, transform=transform_test)
 testloader = torch.utils.data.DataLoader(
-    testset, batch_size=100, shuffle=False, num_workers=2)
+    testset, batch_size=100, shuffle=False, num_workers=4)
 
 classes = ('plane', 'car', 'bird', 'cat', 'deer',
            'dog', 'frog', 'horse', 'ship', 'truck')
@@ -82,6 +85,7 @@ for run in range(args.runs):
     print('==> Building model..')
     # net = VGG('VGG19')
     net = ResNet18()
+    # net = ResNet50()
     # net = PreActResNet18()
     # net = GoogLeNet()
     # net = DenseNet121()
@@ -109,6 +113,8 @@ for run in range(args.runs):
         total = 0
         for batch_idx, (inputs, targets, clean_inputs) in enumerate(trainloader):
             inputs, targets, clean_inputs = inputs.to(device), targets.to(device), clean_inputs.to(device)
+            if args.clean_train:
+                inputs = clean_inputs
             optimizer.zero_grad()
             outputs = net(inputs)
             loss = criterion(outputs, targets)
@@ -161,6 +167,10 @@ for run in range(args.runs):
         scheduler.step()
         if epoch == start_epoch + args.epochs - 1:
             accs.append(acc)
+
+if args.save_dir:
+    os.makedirs(args.save_dir, exist_ok=True)
+    torch.save(net.state_dict(), os.path.join(args.save_dir, 'model_final.pt'))
 
 print(accs)
 print(f'Mean accuracy: {np.mean(np.array(accs))}, \

@@ -29,7 +29,7 @@ class Furnace():
         self.args, self.setup = args, setup
         self.batch_size = batch_size
         self.augmentations = augmentations
-        self.trainset, self.validset = self.prepare_data(normalize=True)
+        self.trainset, self.validset = self.prepare_data(normalize=(not args.not_normalize))
         num_workers = self.get_num_workers()
 
         if self.args.poison_partition is None:
@@ -78,7 +78,10 @@ class Furnace():
     """ CONSTRUCTION METHODS """
 
     def prepare_data(self, normalize=True):
-        trainset, validset = construct_datasets(self.args.dataset, self.args.data_path, normalize)
+        trainset, validset = construct_datasets(self.args.dataset, self.args.data_path, normalize,
+                                                self.args.target_indices_path,
+                                                self.args.simclr_features_path,
+                                                self.args.target_knn_path)
 
         # Prepare data mean and std for later:
         self.dm = torch.tensor(trainset.data_mean)[None, :, None, None].to(**self.setup)

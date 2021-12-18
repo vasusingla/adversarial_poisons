@@ -2,7 +2,7 @@
 import torch
 import torchvision
 import random
-
+from typing import Any, Callable, Optional, Tuple
 from ..consts import *   # import all mean/std constants
 
 import torchvision.transforms as transforms
@@ -18,7 +18,8 @@ import warnings
 warnings.filterwarnings("ignore", "(Possibly )?corrupt EXIF data", UserWarning)
 
 
-def construct_datasets(dataset, data_path, normalize=True):
+def construct_datasets(dataset, data_path, normalize=True, centroid_path='',
+                       simclr_features_path='', target_knn_path=''):
     """Construct datasets with appropriate transforms."""
     # Compute mean, std:
     if dataset == 'CIFAR100':
@@ -31,6 +32,32 @@ def construct_datasets(dataset, data_path, normalize=True):
             data_mean, data_std = cifar100_mean, cifar100_std
     elif dataset == 'CIFAR10':
         trainset = CIFAR10(root=data_path, train=True, download=True, transform=transforms.ToTensor())
+        if cifar10_mean is None:
+            cc = torch.cat([trainset[i][0].reshape(3, -1) for i in range(len(trainset))], dim=1)
+            data_mean = torch.mean(cc, dim=1).tolist()
+            data_std = torch.std(cc, dim=1).tolist()
+        else:
+            data_mean, data_std = cifar10_mean, cifar10_std
+    elif dataset == 'CIFAR10_KMEANS':
+        trainset = CIFAR10_KMEANS(root=data_path, train=True, download=True, transform=transforms.ToTensor(),
+                                  centroid_path=centroid_path)
+        if cifar10_mean is None:
+            cc = torch.cat([trainset[i][0].reshape(3, -1) for i in range(len(trainset))], dim=1)
+            data_mean = torch.mean(cc, dim=1).tolist()
+            data_std = torch.std(cc, dim=1).tolist()
+        else:
+            data_mean, data_std = cifar10_mean, cifar10_std
+    elif dataset == 'CIFAR10_multihead':
+        trainset = CIFAR10_multihead(root=data_path, train=True, download=True, transform=transforms.ToTensor())
+        if cifar10_mean is None:
+            cc = torch.cat([trainset[i][0].reshape(3, -1) for i in range(len(trainset))], dim=1)
+            data_mean = torch.mean(cc, dim=1).tolist()
+            data_std = torch.std(cc, dim=1).tolist()
+        else:
+            data_mean, data_std = cifar10_mean, cifar10_std
+    elif dataset == 'CIFAR10_KNN':
+        trainset = CIFAR10_KNN(root=data_path, train=True, download=True, transform=transforms.ToTensor(),
+                               simclr_features_path=simclr_features_path, target_knn_path=target_knn_path)
         if cifar10_mean is None:
             cc = torch.cat([trainset[i][0].reshape(3, -1) for i in range(len(trainset))], dim=1)
             data_mean = torch.mean(cc, dim=1).tolist()
@@ -101,7 +128,8 @@ def construct_datasets(dataset, data_path, normalize=True):
 
     if dataset == 'CIFAR100':
         validset = CIFAR100(root=data_path, train=False, download=True, transform=transform_valid)
-    elif dataset == 'CIFAR10':
+    elif dataset == 'CIFAR10' or dataset == 'CIFAR10_KMEANS' or dataset=='CIFAR10_multihead'\
+            or dataset == 'CIFAR10_KNN':
         validset = CIFAR10(root=data_path, train=False, download=True, transform=transform_valid)
     elif dataset == 'MNIST':
         validset = MNIST(root=data_path, train=False, download=True, transform=transform_valid)
@@ -189,6 +217,105 @@ class CIFAR10(torchvision.datasets.CIFAR10):
 
         return target, index
 
+class CIFAR10_KMEANS(CIFAR10):
+
+    def __init__(
+            self,
+            root: str,
+            train: bool = True,
+            transform: Optional[Callable] = None,
+            target_transform: Optional[Callable] = None,
+            download: bool = False,
+            centroid_path: str = '/vulcanscratch/vsingla/unlearnable_dataset'
+                                  '/jupyter_notebooks/k_means/target_centroids_6.pt'
+    ) -> None:
+        super(CIFAR10_KMEANS, self).__init__(root, train, transform,
+                                             target_transform, download)
+        self.targets = torch.load(centroid_path)
+
+class CIFAR10_KNN(CIFAR10):
+    def __init__(
+            self,
+            root: str,
+            train: bool = True,
+            transform: Optional[Callable] = None,
+            target_transform: Optional[Callable] = None,
+            download: bool = False,
+            simclr_features_path: str = '/vulcanscratch/vsingla/unlearnable_dataset/'
+                                    'simclr/train_embeddings.pkl',
+            target_knn_path: str = '/vulcanscratch/vsingla/unlearnable_dataset'
+                                  '/jupyter_notebooks/knn/farthest_neighbors_50_penultimate.pt'
+    ) -> None:
+        super(CIFAR10_KNN, self).__init__(root, train, transform,
+                                             target_transform, download)
+        self.idx_targets = torch.load(target_knn_path)
+        self.feat_targets, _ = torch.load(simclr_features_path)
+        # TODO: for knn closest attack, remove this
+        # self.feat_targets = self.feat_targets / self.feat_targets.norm(dim=1)[:, None]
+
+    def __getitem__(self, index):
+        """Getitem from https://pytorch.org/docs/stable/_modules/torchvision/datasets/cifar.html#CIFAR10.
+
+        Args:
+            index (int): Index
+
+        Returns:
+            tuple: (image, target, idx) where target is index of the target class.
+
+        """
+        img, target = self.data[index], self.feat_targets[self.idx_targets[index], :]
+
+        # doing this so that it is consistent with all other datasets
+        # to return a PIL Image
+        img = Image.fromarray(img)
+
+        if self.transform is not None:
+            img = self.transform(img)
+
+        if self.target_transform is not None:
+            target = self.target_transform(target)
+
+        return img, target, index
+
+
+class CIFAR10_multihead(CIFAR10):
+
+    def __init__(self,
+                 root: str,
+                 train: bool = True,
+                 transform: Optional[Callable] = None,
+                 target_transform: Optional[Callable]=  None,
+                 download: bool=False):
+        super(CIFAR10_multihead, self).__init__(root, train, transform,
+                                                target_transform, download)
+        # TODO: Fix this too
+        self.targets = [torch.load(os.path.join('/vulcanscratch/vsingla/unlearnable_dataset/'
+                                                'jupyter_notebooks/k_means/', f'target_centroids_{k}.pt'))
+                                                for k in [6,8,10,12,14]]
+
+    def __getitem__(self, index):
+        """Getitem from https://pytorch.org/docs/stable/_modules/torchvision/datasets/cifar.html#CIFAR10.
+
+        Args:
+            index (int): Index
+
+        Returns:
+            tuple: (image, target, idx) where target is index of the target class.
+
+        """
+        img, target = self.data[index], [target[index] for target in self.targets]
+
+        # doing this so that it is consistent with all other datasets
+        # to return a PIL Image
+        img = Image.fromarray(img)
+
+        if self.transform is not None:
+            img = self.transform(img)
+
+        if self.target_transform is not None:
+            target = self.target_transform(target)
+
+        return img, target, index
 
 class CIFAR100(torchvision.datasets.CIFAR100):
     """Super-class CIFAR100 to return image ids with images."""

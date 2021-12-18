@@ -8,7 +8,7 @@ torch.backends.cudnn.benchmark = BENCHMARK
 
 from .forgemaster_base import _Forgemaster
 
-class ForgemasterUntargeted(_Forgemaster):
+class ForgemasterKNN_farthest(_Forgemaster):
     """Brew passenger poison with given arguments.
 
     “Double, double toil and trouble;
@@ -23,20 +23,15 @@ class ForgemasterUntargeted(_Forgemaster):
         """Implement the closure here."""
         def closure(model, criterion, optimizer):
             """This function will be evaluated on all GPUs."""  # noqa: D401
-            outputs = model(inputs)
-            if type(outputs)==list:
-                losses = [-criterion(output, label) for output, label
-                          in zip(outputs, labels)]
-                loss = sum(losses)
-            else:
-                loss = -criterion(outputs,labels)
+            outputs = model(inputs)[0]
+            outputs_normalized = (outputs)/outputs.norm(dim=1)[:, None]
+            dot_prod = torch.einsum('bf,bkf->bk',outputs_normalized, labels)
+            # print(dot_prod, labels, outputs_normalized)
+            loss = (1-dot_prod).mean()
+            # loss = -torch.cdist(outputs.unsqueeze(dim=1), labels.float()).sum()
             loss.backward(retain_graph=self.retain)
-            if type(outputs)==list:
-                prediction = [(output.data.argmax(dim=1)==label).sum() for
-                              output, label in zip(outputs, labels)]
-                prediction = sum(prediction)/len(prediction)
-            else:
-                prediction = (outputs.data.argmax(dim=1) == labels).sum()
-
+            # bogus prediction vector
+            prediction = torch.zeros(1)
             return loss.detach().cpu(), prediction.detach().cpu()
+
         return closure
